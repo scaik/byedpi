@@ -142,6 +142,7 @@ struct params {
     bool udp;
     bool transparent;
     bool http_connect;
+    bool shadowsocks;
     int max_open;
     int debug;
     size_t bfsize;

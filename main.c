@@ -613,8 +613,9 @@ int init_pid_file(const char *fname)
 #endif
 
 
-void clear_params(void)
+void clear_params(char *line, char **argv)
 {
+
     #ifdef _WIN32
     WSACleanup();
     #endif
@@ -626,6 +627,10 @@ void clear_params(void)
         unlink(params.pid_file);
     }
     #endif
+    if (line) {
+        free(line);
+        free(argv);
+    }
     if (params.mempool) {
         mem_destroy(params.mempool);
         params.mempool = 0;
@@ -666,7 +671,9 @@ int parse_args(int argc, char **argv)
         }
     }
     //
-    params.laddr.in.sin_port = htons(1080);
+    if (!params.laddr.in.sin_port) {
+        params.laddr.in.sin_port = htons(1080);
+    }
     if (!ipv6_support()) {
         params.baddr.sa.sa_family = AF_INET;
     }
@@ -1274,14 +1281,48 @@ int main(int argc, char **argv)
     }
     #endif
     
-    int status = parse_args(argc, argv);
-    if (status) {
-        clear_params();
-        return status - 1;
+    const char *local_port = getenv("SS_LOCAL_PORT");
+    if (local_port) {
+        params.laddr.in.sin_port = htons(atoi(local_port));
+        #ifdef __linux__
+        if (!access("protect_path", F_OK)) {
+            params.protect_path = "protect_path";
+        }
+        #endif
+        params.shadowsocks = 1;
+    }
+    char *cmd_line = 0;
+    const char *env_options = getenv("SS_PLUGIN_OPTIONS");
+    
+    if (env_options) {
+        cmd_line = calloc(strlen(env_options) + 1, 1);
+        strcpy(cmd_line, env_options);
+        
+        argc = 1;
+        argv = calloc(64, sizeof(char *));
+        argv[0] = cmd_line;
+        
+        for (char *c = cmd_line; *c && argc < 64; c++) {
+            if (*c == ' ') {
+                *c = 0;
+                continue;
+            }
+            if (c == cmd_line || !c[-1]) {
+                argv[argc++] = c;
+            }
+        }
     }
     
+    int status = parse_args(argc, argv);
+    if (status) {
+        clear_params(cmd_line, argv);
+        return status - 1;
+    }
+    INIT_ADDR_STR(params.laddr);
+    LOG(LOG_S, "listen address: %s:%d\n", ADDR_STR, ntohs(params.laddr.in.sin_port));
+    
     if (init() < 0 || run(&params.laddr) < 0) {
-        clear_params();
+        clear_params(cmd_line, argv);
         return -1;
     }
     
@@ -1297,12 +1338,12 @@ int main(int argc, char **argv)
         }
         if (!f) {
             perror("fopen");
-            clear_params();
+            clear_params(cmd_line, argv);
             return -1;
         }
         dump_cache(params.mempool, f);
         fclose(f);
     }
-    clear_params();
+    clear_params(cmd_line, argv);
     return 0;
 }

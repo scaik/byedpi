@@ -877,7 +877,8 @@ int on_request(struct poolhd *pool, struct eval *val, int et)
             return -1;
         }
     }
-    else if (*buff->data == S_VER4) {
+    else if (*buff->data == S_VER4
+            && !buff->data[n - 1] && buff->data[1] == S_CMD_CONN) {
         val->flag = FLAG_S4;
         
         error = s4_get_addr(buff->data, n, &dst);
@@ -896,6 +897,23 @@ int on_request(struct poolhd *pool, struct eval *val, int et)
             return -1;
         }
         error = connect_hook(pool, val, &dst, &on_connect);
+    }
+    else if (params.shadowsocks && *buff->data <= S_ATP_I6) {
+        int req_size = s5_get_addr(buff->data - 3, n + 3, &dst, SOCK_STREAM);
+        if (req_size < 0) {
+            return -1;
+        }
+        error = connect_hook(pool, val, &dst, &on_tunnel);
+        if (!error) {
+            val->buff = buff_pop(pool, params.bfsize);
+            assert(val->buff == buff);
+            memmove(buff->data, buff->data + (req_size - 3), n - (req_size - 3));
+            
+            val->buff->lock = n - (req_size - 3);
+            val->recv_count = val->buff->lock;
+            val->round_count++;
+            val->cb = &on_tunnel;
+        }
     }
     else {
         LOG(LOG_E, "ss: invalid version: 0x%x (%zd)\n", *buff->data, n);
