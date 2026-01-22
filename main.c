@@ -83,8 +83,8 @@ static const char help_text[] = {
     #ifdef TCP_FASTOPEN_CONNECT
     "    -F, --tfo                 Enable TCP Fast Open\n"
     #endif
-    "    -A, --auto <t,r,s,n>      Try desync params after this option\n"
-    "                              Detect: torst,redirect,ssl_err,none\n"
+    "    -A, --auto <t,r,s,n,p=i>  Try desync params after this option\n"
+    "                              Detect: torst,redirect,ssl_err,none; pri=<group priority>\n"
     "    -L, --auto-mode <0-3>     Mode: 1 - post_resp, 2 - sort, 3 - 1+2\n"
     "    -u, --cache-ttl <sec>     Lifetime of cached desync params for IP\n"
     "    -y, --cache-dump <file|-> Dump cache to file or stdout\n"
@@ -835,6 +835,13 @@ int parse_args(int argc, char **argv)
                         dp->detect |= DETECT_TLS_ERR;
                         break;
                     case 'n': 
+                        break;
+                    case 'p':
+                        if ((end = strchr(end, '='))) {
+                            float f = strtof(end + 1, &end);
+                            if (*end) invalid = 1;
+                            else dp->prev->pri = (int )f;
+                        }
                         break;
                     default:
                         invalid = 1;
