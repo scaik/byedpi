@@ -150,6 +150,7 @@ struct params {
     struct mphdr *mempool;
     
     const char *protect_path;
+    bool daemonize;
     const char *pid_file;
     int pid_fd;
     const char *cache_file;

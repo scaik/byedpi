@@ -592,23 +592,23 @@ static struct desync_params *add_group(struct desync_params *prev)
 #ifdef DAEMON
 int init_pid_file(const char *fname)
 {
-    params.pid_fd = open(fname, O_RDWR | O_CREAT, 0640);
-    if (params.pid_fd < 0) {
+    int pid_fd = open(params.pid_file, O_RDWR | O_CREAT, 0640);
+    if (pid_fd < 0) {
         return -1;
     }
     struct flock fl = { 
         .l_whence = SEEK_CUR,
         .l_type = F_WRLCK
     };
-    if (fcntl(params.pid_fd, F_SETLK, &fl) < 0) {
+    if (fcntl(pid_fd, F_SETLK, &fl) < 0) {
+        close(pid_fd);
         return -1;
     }
-    params.pid_file = fname;
     char pid_str[21];
     snprintf(pid_str, sizeof(pid_str), "%d", getpid());
     
-    write(params.pid_fd, pid_str, strlen(pid_str));
-    return 0;
+    write(pid_fd, pid_str, strlen(pid_str));
+    return pid_fd;
 }
 #endif
 
@@ -649,19 +649,8 @@ void clear_params(void)
 }
 
 
-int main(int argc, char **argv) 
+int parse_args(int argc, char **argv) 
 {
-    #ifdef _WIN32
-    WSADATA wsa;
-    
-    if (WSAStartup(MAKEWORD(2, 2), &wsa)) {
-        uniperror("WSAStartup");
-        return -1;
-    }
-    if (register_winsvc(argc, argv)) {
-        return 0;
-    }
-    #endif
     int optc = sizeof(options)/sizeof(*options);
     for (int i = 0, e = optc; i < e; i++)
         optc += options[i].has_arg;
@@ -681,11 +670,6 @@ int main(int argc, char **argv)
     if (!ipv6_support()) {
         params.baddr.sa.sa_family = AF_INET;
     }
-    
-    const char *pid_file = 0;
-    bool daemonize = 0;
-    const char *cache_file = 0;
-    
     int rez;
     int invalid = 0;
     
@@ -697,7 +681,6 @@ int main(int argc, char **argv)
     
     struct desync_params *dp = add_group(0);
     if (!dp) {
-        clear_params();
         return -1;
     }
     params.dp = dp;
@@ -726,21 +709,19 @@ int main(int argc, char **argv)
         
         #ifdef DAEMON
         case 'D':
-            daemonize = 1;
+            params.daemonize = 1;
             break;
             
         case 'w':
-            pid_file = optarg;
+            params.pid_file = optarg;
             break;
         #endif
         case 'h':
             printf(help_text);
-            clear_params();
-            return 0;
+            return 1;
         case 'v':
             printf("%s\n", VERSION);
-            clear_params();
-            return 0;
+            return 1;
         
         case 'i':
             if (get_addr(optarg, &params.laddr) < 0)
@@ -831,7 +812,6 @@ int main(int argc, char **argv)
             }
             dp = add_group(dp);
             if (!dp) {
-                clear_params();
                 return -1;
             }
             end = optarg;
@@ -954,7 +934,6 @@ int main(int argc, char **argv)
             dp->hosts = parse_hosts(dp->file_ptr, dp->file_size);
             if (!dp->hosts) {
                 uniperror("parse_hosts");
-                clear_params();
                 return -1;
             }
             break;
@@ -987,7 +966,6 @@ int main(int argc, char **argv)
             struct part *part = add((void *)&dp->parts,
                 &dp->parts_n, sizeof(struct part));
             if (!part) {
-                clear_params();
                 return -1;
             }
             if (parse_offset(part, optarg)) {
@@ -1109,7 +1087,6 @@ int main(int argc, char **argv)
             part = add((void *)&dp->tlsrec,
                 &dp->tlsrec_n, sizeof(struct part));
             if (!part) {
-                clear_params();
                 return -1;
             }
             if (parse_offset(part, optarg)
@@ -1210,24 +1187,20 @@ int main(int argc, char **argv)
             break;
             
         case '?':
-            clear_params();
             return -1;
             
         default: 
             printf("?: %c\n", rez);
-            clear_params();
             return -1;
         }
     }
     if (invalid) {
         fprintf(stderr, "invalid value: -%c %s\n", rez, optarg);
-        clear_params();
         return -1;
     }
     if (all_limited) {
         dp = add_group(dp);
         if (!dp) {
-            clear_params();
             return -1;
         }
     }
@@ -1237,9 +1210,14 @@ int main(int argc, char **argv)
     if (params.baddr.sa.sa_family != AF_INET6) {
         params.ipv6 = 0;
     }
+    return 0;
+}
+
+
+int init(void)
+{
     if (!params.def_ttl) {
         if ((params.def_ttl = get_default_ttl()) < 1) {
-            clear_params();
             return -1;
         }
     }
@@ -1247,26 +1225,24 @@ int main(int argc, char **argv)
         unsigned int *ct = add((void *)&params.cache_ttl,
             &params.cache_ttl_n, sizeof(unsigned int));
         if (!ct) {
-            clear_params();
             return -1;
         }
         *ct = 100800;
     }
+    
     params.mempool = mem_pool(MF_EXTRA, CMP_BYTES);
     if (!params.mempool) {
         uniperror("mem_pool");
-        clear_params();
         return -1;
     }
     srand((unsigned int)time(0));
     
     #ifdef DAEMON
-    if (daemonize && daemon(0, 0) < 0) {
-        clear_params();
+    if (params.daemonize && daemon(0, 0) < 0) {
         return -1;
     }
-    if (pid_file && init_pid_file(pid_file) < 0) {
-        clear_params();
+    if (params.pid_file 
+            && (params.pid_fd = init_pid_file(params.pid_file)) < 0) {
         return -1;
     }
     #endif
@@ -1280,10 +1256,36 @@ int main(int argc, char **argv)
             LOG(LOG_S, "cache ip count: %zd\n", params.mempool->count);
         }
     }
+    return 0;
+}
+
+
+int main(int argc, char **argv) 
+{
+    #ifdef _WIN32
+    WSADATA wsa;
     
-    int status = run(&params.laddr);
+    if (WSAStartup(MAKEWORD(2, 2), &wsa)) {
+        uniperror("WSAStartup");
+        return -1;
+    }
+    if (register_winsvc(argc, argv)) {
+        return 0;
+    }
+    #endif
     
-    for (dp = params.dp; dp; dp = dp->next) {
+    int status = parse_args(argc, argv);
+    if (status) {
+        clear_params();
+        return status - 1;
+    }
+    
+    if (init() < 0 || run(&params.laddr) < 0) {
+        clear_params();
+        return -1;
+    }
+    
+    for (struct desync_params *dp = params.dp; dp; dp = dp->next) {
         LOG(LOG_S, "group: %d (%s), triggered: %d, pri: %d\n", dp->id, dp->str, dp->fail_count, dp->pri);
     }
     if (params.cache_file) {
@@ -1302,5 +1304,5 @@ int main(int argc, char **argv)
         fclose(f);
     }
     clear_params();
-    return status;
+    return 0;
 }
