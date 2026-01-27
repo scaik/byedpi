@@ -32,9 +32,10 @@
 #define DETECT_HTTP_LOCAT 1
 #define DETECT_TLS_ERR 2
 #define DETECT_TORST 8
+#define DETECT_RECONN 16
 
 #define AUTO_RECONN 1
-#define AUTO_POST 2
+#define AUTO_NOPOST 2
 #define AUTO_SORT 4
 
 #define FM_RAND 1
@@ -133,7 +134,9 @@ struct params {
     bool custom_ttl;
     
     bool tfo;
-    unsigned int timeout;
+    unsigned int timeout, ptimeout;
+    int to_count_lim;
+    int to_bytes_lim;
     int auto_level;
     int cache_ttl_n;
     unsigned int *cache_ttl;

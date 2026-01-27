@@ -34,8 +34,9 @@ static int set_timeout(int fd, unsigned int s)
     }
     #else
     #ifdef _WIN32
+    unsigned int sec = s / 1e3;
     if (setsockopt(fd, IPPROTO_TCP,
-            TCP_MAXRT, (char *)&s, sizeof(s))) {
+            TCP_MAXRT, (char *)&sec, sizeof(sec))) {
         uniperror("setsockopt TCP_MAXRT");
         return -1;
     }
@@ -366,7 +367,7 @@ static int on_trigger(int type, struct poolhd *pool, struct eval *val, bool clie
     bool can_reconn = ((lav->sq_buff || before_req)
         && (params.auto_level & AUTO_RECONN) && client_alive
     );
-    if (!can_reconn && !(params.auto_level & AUTO_POST)) {
+    if (!can_reconn && (params.auto_level & AUTO_NOPOST)) {
         return -1;
     }
     INIT_ADDR_STR((val->addr));
@@ -387,7 +388,8 @@ static int on_trigger(int type, struct poolhd *pool, struct eval *val, bool clie
             break;
         }
         if (!(dp->bit & lav->dp_mask)
-                && (!dp->detect || (dp->detect & type))) {
+                && (!dp->detect || (dp->detect & type))
+                && (!(dp->detect & DETECT_RECONN) || can_reconn)) {
             next = dp;
             break;
         }
@@ -452,6 +454,15 @@ static int on_fin(struct poolhd *pool, struct eval *val)
 }
 
 
+int on_timeout(struct poolhd *pool, struct eval *val) {
+    if (++val->to_count >= params.to_count_lim) {
+        return on_torst(pool, val);
+    }
+    set_timer(pool, val, params.ptimeout);
+    return 0;
+}
+
+
 static int on_response(struct poolhd *pool, struct eval *val, 
         const char *resp, ssize_t sn)
 {
@@ -480,6 +491,55 @@ static int on_response(struct poolhd *pool, struct eval *val,
         return on_trigger(dp->detect, pool, val, 1);
     }
     return -1;
+}
+
+
+static int try_set_tls_timer(struct poolhd *pool, 
+        struct eval *val, const char *buff, ssize_t n)
+{
+    ssize_t pos = 0;
+    if (params.to_bytes_lim 
+            && val->recv_count > params.to_bytes_lim) {
+        remove_timer(pool, val);
+        return -1;
+    }
+    do {
+        if (val->tls_rec_pos < 5) {
+            val->tls_rec[val->tls_rec_pos] = buff[pos];
+            val->tls_rec_pos++; pos++;
+            continue;
+        }
+        else if (val->tls_rec_pos == 5) {
+            val->tls_rec_size = ANTOHS(val->tls_rec, 3) + 5;
+            uint8_t t = val->tls_rec[0];
+            
+            if (t < 0x14 || t > 0x18) {
+                LOG(LOG_E, "unknown record type: 0x%x\n", t);
+                return -1;
+            }
+        }
+        else if (val->tls_rec_pos == val->tls_rec_size) {
+            val->tls_rec_pos = 0;
+            val->tls_rec_size = 0;
+            continue;
+        }
+        ssize_t end = val->tls_rec_size - val->tls_rec_pos;
+        if (end <= 0)  {
+            LOG(LOG_E, "invalid record size: %zd\n", val->tls_rec_size);
+            return -1;
+        }
+        if (pos + end > n) end = n - pos;
+        
+        val->tls_rec_pos += end; pos += end;
+    } while (pos < n);
+    
+    if (params.ptimeout) {
+        remove_timer(pool, val);
+        if (val->tls_rec_pos != val->tls_rec_size) {
+            set_timer(pool, val, params.ptimeout);
+        }
+    }
+    return 0;
 }
 
 
@@ -531,9 +591,7 @@ static int setup_conn(struct eval *client, const char *buffer, ssize_t n)
         LOG(LOG_E, "drop connection\n");
         return -1;
     }
-    if ((params.auto_level & (AUTO_POST | AUTO_RECONN)) && params.dp->next) {
-        client->mark = is_tls_chello(buffer, n);
-    }
+    client->mark = is_tls_chello(buffer, n);
     client->dp = dp;
     
     if (params.timeout 
@@ -549,10 +607,6 @@ static int setup_conn(struct eval *client, const char *buffer, ssize_t n)
 
 static int cancel_setup(struct eval *remote)
 {
-    if (params.timeout && !(params.auto_level & AUTO_POST) &&
-            set_timeout(remote->fd, 0)) {
-        return -1;
-    }
     if (post_desync(remote->fd, remote->pair->dp)) {
         return -1;
     }
@@ -632,6 +686,17 @@ ssize_t tcp_recv_hook(struct poolhd *pool,
                 && cancel_setup(val)) {
             return -1;
         }
+    }
+    //
+    if (val->pair->mark 
+            && try_set_tls_timer(pool, val, buff->data, n)) {
+        val->pair->mark = 0;
+    }
+    if (val->flag == FLAG_CONN && val->to_count >= 0
+        && params.timeout 
+            && (params.to_bytes_lim && val->recv_count > params.to_bytes_lim)) {
+        set_timeout(val->fd, 0);
+        val->to_count = -1;
     }
     //
     if (val->flag != FLAG_CONN 

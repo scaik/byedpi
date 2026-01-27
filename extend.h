@@ -24,6 +24,8 @@ static bool check_l34(struct desync_params *dp, int st, const union sockaddr_u *
 
 int on_torst(struct poolhd *pool, struct eval *val);
 
+int on_timeout(struct poolhd *pool, struct eval *val);
+
 #ifdef __linux__
 static int protect(int conn_fd, const char *path);
 #else

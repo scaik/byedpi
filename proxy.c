@@ -655,6 +655,10 @@ int on_tunnel(struct poolhd *pool, struct eval *val, int etype)
     ssize_t n = 0;
     struct eval *pair = val->pair;
     
+    if (etype == POLLTIMEOUT && !pair->buff && val->round_count) {
+        LOG(LOG_S, "timeout (%u) (fd=%d)\n", val->to_count, val->fd);
+        return on_timeout(pool, val);
+    }
     if (etype & POLLOUT || etype == POLLTIMEOUT) {
         LOG(LOG_S, "pollout (fd=%d)\n", val->fd);
         val = pair;

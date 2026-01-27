@@ -83,13 +83,13 @@ static const char help_text[] = {
     #ifdef TCP_FASTOPEN_CONNECT
     "    -F, --tfo                 Enable TCP Fast Open\n"
     #endif
-    "    -A, --auto <t,r,s,n,p=i>  Try desync params after this option\n"
-    "                              Detect: torst,redirect,ssl_err,none; pri=<group priority>\n"
-    "    -L, --auto-mode <0-3>     Mode: 1 - post_resp, 2 - sort, 3 - 1+2\n"
+    "    -A, --auto <t,r,s,n,k,p>  Try desync params after this option\n"
+    "                              Detect: torst,redirect,ssl_err,none; keep,pri=<group priority>\n"
+    "    -L, --auto-mode <s>       Mode: sort\n"
     "    -u, --cache-ttl <sec>     Lifetime of cached desync params for IP\n"
     "    -y, --cache-dump <file|-> Dump cache to file or stdout\n"
     #ifdef TIMEOUT_SUPPORT
-    "    -T, --timeout <sec>       Timeout waiting for response, after which trigger auto\n"
+    "    -T, --timeout <s[:p:c:b]> Timeout waiting for response, after which trigger auto\n"
     #endif
     "    -K, --proto <t,h,u,i>     Protocol whitelist: tls,http,udp,ipv4\n"
     "    -H, --hosts <file|:str>   Hosts whitelist, filename or :string\n"
@@ -785,20 +785,18 @@ int parse_args(int argc, char **argv)
             while (end && !invalid) {
                 switch (*end) {
                     case '0': 
+                    case '2':
+                        params.auto_level |= AUTO_NOPOST;
+                        if (*end == '2') params.auto_level |= AUTO_SORT;
                         break;
                     case '1':
-                    case 'p': 
-                        params.auto_level |= AUTO_POST;
                         break;
-                    case '2':
+                    case '3':
                     case 's': 
                         params.auto_level |= AUTO_SORT;
                         break;
                     case 'r':
                         params.auto_level = 0;
-                        break;
-                    case '3':
-                        params.auto_level |= (AUTO_POST | AUTO_SORT);
                         break;
                     default:
                         invalid = 1;
@@ -833,6 +831,9 @@ int parse_args(int argc, char **argv)
                     case 'a':
                     case 's': 
                         dp->detect |= DETECT_TLS_ERR;
+                        break;
+                    case 'k':
+                        dp->detect |= DETECT_RECONN;
                         break;
                     case 'n': 
                         break;
@@ -898,16 +899,18 @@ int parse_args(int argc, char **argv)
             break;
         
         case 'T':;
-            #ifdef __linux__
             float f = strtof(optarg, &end);
-            val = (long)(f * 1000);
-            #else
-            val = strtol(optarg, &end, 0);
-            #endif
-            if (val <= 0 || (unsigned long)val > UINT_MAX || *end)
+            params.timeout = (f * 1000);
+            
+            if (*end == ':') 
+                params.ptimeout = strtof(end + 1, &end) * 1000;
+            if (*end == ':') 
+                params.to_count_lim = strtof(end + 1, &end);
+            if (*end == ':')
+                params.to_bytes_lim = strtof(end + 1, &end);
+            if (*end)
                 invalid = 1;
-            else
-                params.timeout = val;
+                
             break;
             
         case 'K':
