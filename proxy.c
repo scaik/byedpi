@@ -50,6 +50,9 @@ static void on_cancel(int sig) {
 
 static void on_hup(int sig) {
     FILE *f;
+    if (!params.cache_file) {
+        return;
+    }
     if (!strcmp(params.cache_file, "-"))
         f = stdout;
     else
@@ -60,7 +63,7 @@ static void on_hup(int sig) {
     }
     LOG(LOG_S, "dump cache\n");
     dump_cache(params.mempool, f);
-    fclose(f);
+    if (f != stdout) fclose(f);
 }
 
 
