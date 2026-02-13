@@ -48,7 +48,6 @@ struct elem_i {
     uint64_t dp_mask;
     int detect;
     time_t time;
-    int time_inc;
 };
 
 struct mphdr {

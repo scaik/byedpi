@@ -138,8 +138,7 @@ struct params {
     int to_count_lim;
     int to_bytes_lim;
     int auto_level;
-    int cache_ttl_n;
-    unsigned int *cache_ttl;
+    long cache_ttl;
     bool ipv6;
     bool resolve;
     bool udp;
