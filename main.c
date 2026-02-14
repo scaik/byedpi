@@ -47,7 +47,7 @@ fake_udp = {
 struct params params = {
     .await_int = 10,
     
-    .cache_ttl = 100800,
+    .cache_ttl = 0,
     .ipv6 = 1,
     .resolve = 1,
     .udp = 1,
@@ -87,11 +87,11 @@ static const char help_text[] = {
     "    -A, --auto <t,r,s,n,k,p>  Try desync params after this option\n"
     "                              Detect: torst,redirect,ssl_err,none; keep,pri=<group priority>\n"
     "    -L, --auto-mode <s>       Mode: sort\n"
-    "    -u, --cache-ttl <sec>     Lifetime of cached desync params for IP\n"
     "    -y, --cache-dump <file|-> Dump cache to file or stdout\n"
     #ifdef TIMEOUT_SUPPORT
     "    -T, --timeout <s[:p:c:b]> Timeout waiting for response, after which trigger auto\n"
     #endif
+    "    -u, --cache-ttl <sec>     Lifetime of cached desync params for IP\n"
     "    -K, --proto <t,h,u,i>     Protocol whitelist: tls,http,udp,ipv4\n"
     "    -H, --hosts <file|:str>   Hosts whitelist, filename or :string\n"
     "    -j, --ipset <file|:str>   IP whitelist\n"
@@ -888,8 +888,12 @@ int parse_args(int argc, char **argv)
             val = strtol(optarg, &end, 0);
             if (val <= 0 || *end) 
                 invalid = 1;
-            else
-                params.cache_ttl = val;
+            else {
+                if (!params.cache_ttl) {
+                    params.cache_ttl = val;
+                }
+                dp->cache_ttl = val;
+            }
             break;
         
         case 'T':;

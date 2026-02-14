@@ -73,8 +73,11 @@ static struct elem_i *cache_get(const union sockaddr_u *dst)
     if (!val) {
         return 0;
     }
+    struct desync_params *dp = val->dp;
+    long ttl = dp->cache_ttl ? dp->cache_ttl : params.cache_ttl;
+    
     time_t t = time(0);
-    if (t > val->time + params.cache_ttl) {
+    if (ttl && t > val->time + ttl) {
         LOG(LOG_S, "time=%jd, now=%jd, ignore\n", (intmax_t)val->time, (intmax_t)t);
         mem_delete(params.mempool, (char *)&key, len);
         return 0;
@@ -407,12 +410,14 @@ static int on_trigger(int type, struct poolhd *pool, struct eval *val, bool clie
         LOG(LOG_S, "unreach ip: %s\n", ADDR_STR);
         cache->dp_mask = 0;
         cache->detect = 0;
+        cache->dp = params.dp;
         return -1;
     }
     LOG(LOG_S, "save: ip=%s, id=%d\n", ADDR_STR, next->id);
     
     cache->dp_mask |= lav->dp_mask;
     cache->detect = lav->detect;
+    cache->dp = dp;
     
     if (can_reconn) {
         return reconnect(pool, val);

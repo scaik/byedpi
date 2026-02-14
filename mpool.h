@@ -46,6 +46,7 @@ struct elem_i {
     char *extra;
     
     uint64_t dp_mask;
+    struct desync_params *dp;
     int detect;
     time_t time;
 };

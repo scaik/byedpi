@@ -120,6 +120,7 @@ struct desync_params {
     int fail_count;
     int pri;
     const char *str;
+    long cache_ttl;
     
     struct desync_params *prev;
     struct desync_params *next;
