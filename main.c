@@ -84,8 +84,8 @@ static const char help_text[] = {
     #ifdef TCP_FASTOPEN_CONNECT
     "    -F, --tfo                 Enable TCP Fast Open\n"
     #endif
-    "    -A, --auto <t,r,s,n,k,p>  Try desync params after this option\n"
-    "                              Detect: torst,redirect,ssl_err,none; keep,pri=<group priority>\n"
+    "    -A, --auto <t,r,s,n,k,c>  Try desync params after this option\n"
+    "                              Detect: torst,redirect,ssl_err,none,conn,keep,pri=<num>\n"
     "    -L, --auto-mode <s>       Mode: sort\n"
     "    -y, --cache-dump <file|-> Dump cache to file or stdout\n"
     #ifdef TIMEOUT_SUPPORT
@@ -835,6 +835,9 @@ int parse_args(int argc, char **argv)
                         break;
                     case 'k':
                         dp->detect |= DETECT_RECONN;
+                        break;
+                    case 'c':
+                        dp->detect |= DETECT_CONNECT;
                         break;
                     case 'n': 
                         break;

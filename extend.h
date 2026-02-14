@@ -22,7 +22,7 @@ ssize_t udp_hook(struct eval *val,
     
 static bool check_l34(struct desync_params *dp, int st, const union sockaddr_u *dst);
 
-int on_torst(struct poolhd *pool, struct eval *val);
+int on_connerr(struct poolhd *pool, struct eval *val);
 
 int on_timeout(struct poolhd *pool, struct eval *val);
 

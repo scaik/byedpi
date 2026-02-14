@@ -33,6 +33,7 @@
 #define DETECT_TLS_ERR 2
 #define DETECT_TORST 8
 #define DETECT_RECONN 16
+#define DETECT_CONNECT 32
 
 #define AUTO_RECONN 1
 #define AUTO_NOPOST 2

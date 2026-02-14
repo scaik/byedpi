@@ -951,8 +951,8 @@ int on_connect(struct poolhd *pool, struct eval *val, int et)
         case ECONNRESET:
         case ECONNREFUSED:
         case ETIMEDOUT:
-        case EHOSTUNREACH:
-            if (on_torst(pool, val) == 0) {
+        //case EHOSTUNREACH:
+            if (on_connerr(pool, val) == 0) {
                 return 0;
             }
         }

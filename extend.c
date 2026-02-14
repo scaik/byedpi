@@ -122,11 +122,11 @@ int on_socks_recv(struct poolhd *pool, struct eval *val, int t)
     ssize_t n = recv(val->fd, (char *)&r, sizeof(r), 0);
     if (n < 2) {
         uniperror("socks recv");
-        return on_torst(pool, val);
+        return on_connerr(pool, val);
     }
     if (r.ver != S_VER5 || r.cmd != 0x00) {
         LOG(LOG_E, "socks answer: %d\n", r.cmd);
-        return on_torst(pool, val);
+        return on_connerr(pool, val);
     }
     if (val->conn_state != FLAG_S5) {
         r.cmd = S_CMD_CONN;
@@ -134,7 +134,7 @@ int on_socks_recv(struct poolhd *pool, struct eval *val, int t)
         
         if (send(val->fd, (char *)&r, len, 0) < 0) {
             uniperror("socks send");
-            return on_torst(pool, val);
+            return on_connerr(pool, val);
         }
         val->conn_state = FLAG_S5;
         return 0;
@@ -150,7 +150,7 @@ int on_socks_conn(struct poolhd *pool, struct eval *val, int t)
     
     if (send(val->fd, (char *)data, sizeof(data), 0) < 0) {
         uniperror("socks send");
-        return on_torst(pool, val);
+        return on_connerr(pool, val);
     }
     if (mod_etype(pool, val, POLLIN) ||
             mod_etype(pool, val->pair, POLLIN)) {
@@ -359,7 +359,7 @@ static void swop_groups(struct desync_params *dpc, struct desync_params *dpn)
 }
 
 
-static int on_trigger(int type, struct poolhd *pool, struct eval *val, bool client_alive)
+int on_trigger(int type, struct poolhd *pool, struct eval *val, bool client_alive)
 {
     struct eval *lav = val->pair;
     
@@ -426,7 +426,7 @@ static int on_trigger(int type, struct poolhd *pool, struct eval *val, bool clie
 }
 
 
-int on_torst(struct poolhd *pool, struct eval *val)
+static int on_torst(struct poolhd *pool, struct eval *val)
 {
     if (on_trigger(DETECT_TORST, pool, val, 1) == 0) {
         return 0;
@@ -463,6 +463,12 @@ int on_timeout(struct poolhd *pool, struct eval *val) {
     }
     set_timer(pool, val, params.ptimeout);
     return 0;
+}
+
+
+int on_connerr(struct poolhd *pool, struct eval *val)
+{
+    return on_trigger(DETECT_CONNECT, pool, val, 1);
 }
 
 
