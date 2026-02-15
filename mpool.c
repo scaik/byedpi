@@ -169,8 +169,9 @@ void dump_cache(struct mphdr *hdr, FILE *out)
         else
             inet_ntop(AF_INET6, &key->ip.v6, ADDR_STR, sizeof(ADDR_STR));
         
-        fprintf(out, "0 %s %d %lu %d %jd %.*s\n", 
-            ADDR_STR, ntohs(key->port), p->dp_mask, p->dp->id,
+        int bitlen = p->main.len - offsetof(struct cache_key, ip.v4) * 8;
+        fprintf(out, "0 %s %d %d %lu %d %jd %.*s\n", 
+            ADDR_STR, bitlen, ntohs(key->port), p->dp_mask, p->dp->id,
             (intmax_t)p->time, p->extra_len ? p->extra_len : 1, p->extra ? p->extra : "-");
     } 
     while (kavl_itr_next(my, &itr));
@@ -184,18 +185,20 @@ void load_cache(struct mphdr *hdr, FILE *in)
         char addr_str[INET6_ADDRSTRLEN] = { 0 };
         char host[256] = { 0 };
         
+        int bitlen;
         uint16_t port;
         uint64_t mask = 0;
         int dp_id;
         time_t cache_time;
         
-        int c = fscanf(in, "0 %39s %hu %lu %d %jd %255s\n", 
-            addr_str, &port, &mask, &dp_id, &cache_time, host);
+        int c = fscanf(in, "0 %39s %d %hu %lu %d %jd %255s\n", 
+            addr_str, &bitlen, &port, &mask, &dp_id, &cache_time, host);
         if (c < 1) {
             return;
         }
         struct cache_key key = { 0 };
-        size_t key_size = offsetof(struct cache_key, ip.v4);
+        int key_size = offsetof(struct cache_key, ip.v4);
+        bitlen += key_size * 8;
         
         if (inet_pton(AF_INET, addr_str, &key.ip.v4) <= 0) {
             if (inet_pton(AF_INET6, addr_str, &key.ip.v6) <= 0) {
@@ -208,6 +211,9 @@ void load_cache(struct mphdr *hdr, FILE *in)
         else {
             key.family = AF_INET;
             key_size += sizeof(key.ip.v4);
+        }
+        if (key_size * 8 < bitlen) {
+            continue;
         }
         key.port = htons(port);
         
@@ -222,7 +228,7 @@ void load_cache(struct mphdr *hdr, FILE *in)
         }
         memcpy(data, &key, key_size);
         
-        struct elem_i *e = mem_add(hdr, (char *)data, key_size, sizeof(struct elem_i));
+        struct elem_i *e = mem_add(hdr, (char *)data, bitlen, sizeof(struct elem_i));
         if (!e) {
             free(data);
             return;

@@ -192,6 +192,7 @@ const struct option options[] = {
     {"ipset",         1, 0, 'j'},
     {"to-socks5",     1, 0, 'C'}, //
     {"comment",       1, 0, '#'}, //
+    {"cache-merge",   1, 0, '/'},
     {0}
 };
     
@@ -899,6 +900,14 @@ int parse_args(int argc, char **argv)
             }
             break;
         
+        case '/':
+            val = strtol(optarg, &end, 0);
+            if (val < 0 || val > 32 || *end) 
+                invalid = 1;
+            else 
+                params.cache_pre = 32 - val;
+            break;
+            
         case 'T':;
             float f = strtof(optarg, &end);
             params.timeout = (f * 1000);
@@ -1239,7 +1248,7 @@ int init(void)
             return -1;
         }
     }
-    params.mempool = mem_pool(MF_EXTRA, CMP_BYTES);
+    params.mempool = mem_pool(MF_EXTRA, CMP_BITS);
     if (!params.mempool) {
         uniperror("mem_pool");
         return -1;

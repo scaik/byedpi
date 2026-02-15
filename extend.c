@@ -64,12 +64,25 @@ static ssize_t serialize_addr(const union sockaddr_u *dst,
 }
 
 
+static int eq_bitlen(const char *a, const char *b, int n)
+{
+    int by = 0, bi = 0;
+    for (; by < n && a[by] == b[by]; by++) {
+    }
+    if (by != n) {
+        for (; bi < 8 
+            && (a[by] >> bi) != (b[by] >> bi); bi++) {}
+    }
+    return by * 8 + 8 - bi;
+}
+
+
 static struct elem_i *cache_get(const union sockaddr_u *dst)
 {
     struct cache_key key = { 0 };
     int len = serialize_addr(dst, &key);
     
-    struct elem_i *val = mem_get(params.mempool, (char *)&key, len);
+    struct elem_i *val = mem_get(params.mempool, (char *)&key, len * 8);
     if (!val) {
         return 0;
     }
@@ -90,14 +103,22 @@ static struct elem_i *cache_add(
         const union sockaddr_u *dst, char **host, int host_len)
 {
     struct cache_key key = { 0 };
-    int cmp_len = serialize_addr(dst, &key);
+    int bytes = serialize_addr(dst, &key);
+    int cmp_len = bytes * 8;
     time_t t = time(0);
     
-    struct cache_key *data = calloc(1, cmp_len);
+    if (dst->sa.sa_family == AF_INET && params.cache_pre) {
+        struct elem_i *val = mem_get(
+            params.mempool, (char *)&key, cmp_len - params.cache_pre);
+        if (val) {
+            cmp_len = eq_bitlen((char *)&key, val->main.data, bytes);
+        }
+    }
+    struct cache_key *data = calloc(1, bytes);
     if (!data) {
         return 0;
     }
-    memcpy(data, &key, cmp_len);
+    memcpy(data, &key, bytes);
     
     struct elem_i *val = mem_add(params.mempool, (char *)data, cmp_len, sizeof(struct elem_i));
     if (!val) {
