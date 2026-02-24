@@ -188,7 +188,13 @@ int resolve_plain(const char *hostname, int len, union sockaddr_u *addr_out) {
     uint16_t qtype = htons(TYPE_A);
     uint16_t qclass = htons(CLASS_INET);
     
-    return resolve_plain_inner(qname, qname_len, qtype, qclass, addr_out, hostname, len, 0);
+    int res = resolve_plain_inner(qname, qname_len, qtype, qclass, addr_out, hostname, len, 0);
+    if (res < 0 && params.ipv6) {
+        qtype = htons(TYPE_AAAA);
+        res = resolve_plain_inner(qname, qname_len, qtype, qclass, addr_out, hostname, len, 0);
+    }
+    
+    return res;
 }
 
 int resolve_dot_inner(
@@ -343,7 +349,13 @@ int resolve_dot(const char *hostname, int len, union sockaddr_u *addr_out) {
     uint16_t qtype = htons(TYPE_A);
     uint16_t qclass = htons(CLASS_INET);
     
-    return resolve_dot_inner(qname, qname_len, qtype, qclass, addr_out, hostname, len, 0);
+    int res = resolve_dot_inner(qname, qname_len, qtype, qclass, addr_out, hostname, len, 0);
+    if (res < 0 && params.ipv6) {
+        qtype = htons(TYPE_AAAA);
+        res = resolve_dot_inner(qname, qname_len, qtype, qclass, addr_out, hostname, len, 0);
+    }
+    
+    return res;
 }
 
 int resolve(const char *hostname, int len, union sockaddr_u *addr_out) {
