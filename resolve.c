@@ -1,5 +1,6 @@
 #include "resolve.h"
 
+#include <unistd.h>
 #include <string.h>
 #include <stdlib.h>
 #include <ctype.h>
@@ -252,10 +253,21 @@ int resolve_dot_inner(
     
     if (!ctx) {
         ctx = SSL_CTX_new_fn(TLS_method_fn());
+        SSL_CTX_set_default_verify_paths_fn(ctx);
+        SSL_CTX_set_verify_fn(ctx, SSL_VERIFY_PEER, NULL);
     }
     
     SSL *ssl = SSL_new_fn(ctx);
     if (!ssl) {
+        close(fd);
+        free(dot_packet);
+        return -1;
+    }
+    
+    if (
+        !SSL_ctrl_fn(ssl, SSL_CTRL_SET_TLSEXT_HOSTNAME, TLSEXT_NAMETYPE_host_name, (void *)params.dns_hostname)
+    ) {
+        SSL_free_fn(ssl);
         close(fd);
         free(dot_packet);
         return -1;
@@ -317,6 +329,7 @@ int resolve_dot_inner(
     if (cname_qname) {
         if (cname_rec >= 10) {
             LOG(LOG_S, "failed to resolve '%.*s': CNAME chain too long\n", debug_hostname_len, debug_hostname);
+            free(cname_qname);
             return -1;
         }
         
