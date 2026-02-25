@@ -78,9 +78,9 @@ static const char help_text[] = {
     #endif
     "    -c, --max-conn <count>    Connection count limit, default 512\n"
     "    -N, --no-domain           Deny domain resolving\n"
-    "    -k, --dns-mode <mode>     DNS resolution mode: system(s),plain(p),dot(t)\n"
+    "    -k, --dns-mode <mode>     Domain resolution mode: system(s),plain(p),dot(t)\n"
     "                              Defaults to system\n"
-    "    -z, --dns <host[:port]>   DNS resolver address\n"
+    "    -z, --dns <host[:port]>   Nameserver address\n"
     "                              Only applicable when DNS mode is not 'system'\n"
     "                              Takes IP as host when DNS mode is 'plain' and hostname when DNS mode is 'dot'\n"
     "    -U, --no-udp              Deny UDP association\n"
